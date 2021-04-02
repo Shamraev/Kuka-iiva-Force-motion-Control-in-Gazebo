@@ -1,0 +1,2 @@
+base_link_name: "iiwa_link_0"
+tool_link_name: "tool_link_ee_kuka"

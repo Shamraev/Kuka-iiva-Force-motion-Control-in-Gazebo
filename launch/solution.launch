@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+	<rosparam ns="profi2021_master_solution" command="load" file="$(find profi2021_master_solution)/config/setup.yaml" />
+  <arg name="model" default="$(find iiwa_description)/urdf/iiwa14.urdf.xacro"/>
+  <param name="iiwa_urdf_model" command="$(find xacro)/xacro --inorder $(arg model)" />
+	<arg name="force_desired" default="20.0"/>
+	<param name="/profi2021_master_solution/force_desired" value="$(arg force_desired)" type="double" />
+	<node pkg="profi2021_master_solution" type="master_test" name="master_test" output="screen" />
+  <!-- <node pkg="profi2021_master_solution" name="master_test" type="test.py" output="screen"/> -->
+</launch>
