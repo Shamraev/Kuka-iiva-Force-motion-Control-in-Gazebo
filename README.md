@@ -46,6 +46,10 @@
 
         <node pkg="profi2021_master_solution" name="master_test" type="test.py" output="screen"/>
 
+    При этом в некотором случае **.py** файлу необходимо дать права на исполнение:
+        
+        chmod a+x src/profi2021_master_solution/scripts/test.py
+    
     При успешном выполнении всех выше обозначенных действий манипулятор переместится рабочим инструментом в стартовую точку и через 3 секунды начнет движение по окружности в плоскости _x - y_;
 
     ![iiwa_test_1_example](docs/pics/iiwa_track_1_example.gif)
