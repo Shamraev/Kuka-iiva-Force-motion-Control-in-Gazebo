@@ -159,6 +159,8 @@ def startControllers():
         print "Service call failed: %s" % e
 
 def main():
+    global angleZ
+
     rospy.init_node('main_test', anonymous=True)
     rospy.Subscriber("/iiwa/joint_states", JointState, iiwaStateCallback)
     rospy.Subscriber("/iiwa/camera1/image_raw", Image, iiwaImageCallback)
@@ -212,7 +214,9 @@ def main():
     NextP[0] = frame_dest.p[0]
     NextP[1] = frame_dest.p[1]
     NextP[2] = frame_dest.p[2]
-
+    needWait = 0
+    startT = 0
+    StartRotate = True
     while not rospy.is_shutdown():
         if counter*dt>3.0:
             #frame_dest.p[0] = 0.2*sin(counter*dt) + 0.5
@@ -225,7 +229,17 @@ def main():
             #rospy.loginfo("nexP in Global CS: (%f, %f)",p.x(), p.y())
             #rospy.loginfo("CurP in Global CS: (%f, %f, %f)",frame_dest.p[0], frame_dest.p[1], frame_dest.p[2])
             #rospy.loginfo("angleZ: %f", angleZ)
-            rospy.loginfo("Fz: %f", Fz)
+            #rospy.loginfo("Fz: %f", Fz)
+
+
+            [Rz, Ry, Rx] = frame_dest.M.GetEulerZYX()
+            rospy.loginfo("Euler angles Rz, Ry, Rx: %f, %f, %f", Rz, Ry, Rx)
+
+            # Loop
+            if StartRotate and  abs(Rz)<0.01:
+                needWait = 2
+                startT = counter*dt
+                StartRotate = False
 
             # zContrl = (force_desired-Fz)*0.006*dt
             # # Saturation
@@ -233,8 +247,17 @@ def main():
             #     zContrl = copysign(1, zContrl)*0.05
             # frame_dest.p[2] = frame_dest.p[2] - zContrl
 
-            frame_dest.p[0] = p.x()
-            frame_dest.p[1] = p.y()
+            if needWait==0:
+                frame_dest.p[0] = p.x()
+                frame_dest.p[1] = p.y()
+            elif counter*dt - startT>needWait: # wait
+                needWait = 0
+            else:
+                angleZ = -3.14/2
+
+            if counter*dt - startT>needWait+5:
+                StartRotate = True
+
             frame_dest.M = frame_dest.M*kdl.Rotation.RotZ(angleZ*dt*2)
 
         ret = iksolverpos.CartToJnt(q, frame_dest, q_dest)
@@ -245,6 +268,7 @@ def main():
             u[i] = KP[i]*(q_dest[i]-q[i]) - KD[i]*dq[i] + grav_torques[i]
             torq_msg.data = u[i]
             torque_controller_pub[i].publish(torq_msg)
+
         counter+=1
         rate.sleep()
 
