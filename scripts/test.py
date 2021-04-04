@@ -78,8 +78,8 @@ def iiwaImageCallback(img_msg):
         x,y,w,h = cv2.boundingRect(c)
 
         # draw the biggest contour (c) in green
-        #output = cv_image.copy()
-        #cv2.rectangle(output,(x,y),(x+w,y+h),(0,255,0),2)
+        output = cv_image.copy()
+        cv2.rectangle(output,(x,y),(x+w,y+h),(0,255,0),2)
         # cv2.imshow("Black contour at the image_box", output)
         # cv2.waitKey(1)
 
@@ -157,7 +157,6 @@ def main():
     chain = tree.getChain(base_link, tool_link)
     L = np.transpose(np.array([[1, 1, 1, 0.01, 0.01, 0.01]]))
     iksolverpos = kdl.ChainIkSolverPos_LMA(chain, L)
-    jntToJacSolver = kdl.ChainJntToJacSolver(chain)
 
     # Generate dynamic model for orocos_kdl
     grav = kdl.Vector(0, 0, -9.82)
@@ -194,7 +193,8 @@ def main():
             #rospy.loginfo("nexP in Global CS: (%f, %f)",p.x(), p.y())
             #rospy.loginfo("CurP in Global CS: (%f, %f, %f)",frame_dest.p[0], frame_dest.p[1], frame_dest.p[2])
             #rospy.loginfo("angleZ: %f", angleZ)
-            rospy.loginfo("Fz: %f", Fz)
+            #rospy.loginfo("Fz: %f", Fz)
+
 
             [Rz, Ry, Rx] = frame_dest.M.GetEulerZYX()
             #rospy.loginfo("Euler angles Rz, Ry, Rx: %f, %f, %f", Rz, Ry, Rx)
@@ -205,7 +205,7 @@ def main():
                 startT = counter*dt
                 StartRotate = False
 
-            if needWait==0 and counter*dt>5.0:
+            if needWait==0:
                 frame_dest.p[0] = p.x()
                 frame_dest.p[1] = p.y()
             elif counter*dt - startT>needWait: # wait
@@ -221,35 +221,16 @@ def main():
         ret = iksolverpos.CartToJnt(q, frame_dest, q_dest)
         #rospy.loginfo("IK solution: %f, %f, %f, %f, %f, %f, %f", q_dest[0],  q_dest[1],  q_dest[2],  q_dest[3],  q_dest[4],  q_dest[5],  q_dest[6])
         dyn_model.JntToGravity(q, grav_torques)
-
-        if force_desired>20: # Not checked for force_desired>20
-            force_desired = 20
-
-        Fzerr = (force_desired-Fz)
-
-        J = kdl.Jacobian(7)
-        jntToJacSolver.JntToJac(q, J)
-
-        xdot = kdl.JntArray(6)
-        for i in range(6):
-            xdot[i] = 0;
-            for j in range(7):
-                xdot[i] += J[i,j] * dq[j]
-
-        FFz = [0, 0, -Fzerr*0.1, 0, 0, 0]
-        tau_Fz = kdl.JntArray(7)
         #rospy.loginfo("Estimation torque on joins: %f, %f, %f, %f, %f, %f, %f\n" % (grav_torques[0], grav_torques[1],grav_torques[2], grav_torques[3], grav_torques[4], grav_torques[5], grav_torques[6]))
         for i in range(0,7):
-
-            for j in range(0,6):
-                tau_Fz[i] += J[j,i] * FFz[j];
-
-            u[i] = KP[i]*(q_dest[i]-q[i]) - KD[i]*dq[i] + grav_torques[i] + tau_Fz[i]*0 # I do not know why, but auto test returns 'test error' if torn on tau_Fz.
+            u[i] = KP[i]*(q_dest[i]-q[i]) - KD[i]*dq[i] + grav_torques[i]
             torq_msg.data = u[i]
             torque_controller_pub[i].publish(torq_msg)
 
         counter+=1
         rate.sleep()
+
+
 
 if __name__ == '__main__':
     try:
