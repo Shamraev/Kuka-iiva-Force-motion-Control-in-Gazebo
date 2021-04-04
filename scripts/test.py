@@ -15,7 +15,7 @@ import kdl_parser_py.urdf
 
 import cv2
 from cv_bridge import CvBridge, CvBridgeError
-
+import time
 
 dt = 0.01
 
@@ -24,6 +24,7 @@ KP = [50.0, 150.0, 40.0, 20.0, 18.0, 18.0, 15.0]
 KD = [5.0, 25.0, 5.0, 2.0, 1.0, 1.0, 0.5]
 
 torque_controller_pub = []
+position_controller_pub = []
 q = kdl.JntArray(7)
 dq = kdl.JntArray(7)
 ddq = kdl.JntArray(7)
@@ -35,6 +36,7 @@ cv_bridge = CvBridge()
 NextP = np.array([0, 0, 0])
 angleZ = 0
 Debug = False
+QStart = q
 
 def iiwaStateCallback(data):
     global q, dq, ddq
@@ -66,6 +68,8 @@ def iiwaImageCallback(img_msg):
         masking = cv2.inRange(hsv_img, lower_black, upper_black)
 
         image, contours, hierarchy = cv2.findContours(masking, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+        if len(contours)<=0: return None
+
         img = cv_image.copy()
         cv2.drawContours(img, contours, -1, (0, 0, 255), 5)
         if Debug:
@@ -95,10 +99,11 @@ def iiwaImageCallback(img_msg):
 
             pointS.append(c[c[:,:,1] == yHLineS])
             pointE.append(c[c[:,:,1] == yHLineE])
+            if len(pointS)<=0 or len(pointE)<=0 or pointS[0].size==0 or pointE[0].size==0:
+                return None
             pS = np.array([pointS[0][0][0], pointS[0][0][1]])
             pE = np.array([pointE[0][0][0], pointE[0][0][1]])
             V = pE - pS
-            #rospy.loginfo("pointS (%f, %f)", xS,yS)
             cv_image = cv2.circle(cv_image, (pS[0],pS[1]), radius=10, color=(0, 0, 255), thickness=2)
             cv_image = cv2.circle(cv_image, (pE[0],pE[1]), radius=10, color=(0, 0, 255), thickness=5)
             cv_image = cv2.circle(cv_image, (curP[0],curP[1]), radius=10, color=(0, 255, 0), thickness=5)
@@ -127,9 +132,44 @@ def startControllers():
     except rospy.ServiceException, e:
         print "Service call failed: %s" % e
 
+def switchToTorqueControllers():
+    rospy.wait_for_service('/iiwa/controller_manager/switch_controller')
+    try:
+        switch_controller = rospy.ServiceProxy('/iiwa/controller_manager/switch_controller', SwitchController)
+        ret = switch_controller(start_controllers=['joint1_torque_controller', 'joint2_torque_controller', 'joint3_torque_controller',
+                                 'joint4_torque_controller', 'joint5_torque_controller', 'joint6_torque_controller', 'joint7_torque_controller'],
+                                stop_controllers=['joint1_position_controller', 'joint2_position_controller', 'joint3_position_controller',
+                                 'joint4_position_controller', 'joint5_position_controller', 'joint6_position_controller', 'joint7_position_controller'],
+
+                                strictness=SwitchControllerRequest.STRICT)
+    except rospy.ServiceException, e:
+        print "Service call failed: %s" % e
+
+def switchToPositionControllers():
+    rospy.wait_for_service('/iiwa/controller_manager/switch_controller')
+    try:
+        switch_controller = rospy.ServiceProxy('/iiwa/controller_manager/switch_controller', SwitchController)
+        ret = switch_controller(start_controllers=['joint1_position_controller', 'joint2_position_controller', 'joint3_position_controller',
+                                 'joint4_position_controller', 'joint5_position_controller', 'joint6_position_controller', 'joint7_position_controller'],
+                                stop_controllers=['joint1_torque_controller', 'joint2_torque_controller', 'joint3_torque_controller',
+                                 'joint4_torque_controller', 'joint5_torque_controller', 'joint6_torque_controller', 'joint7_torque_controller'],
+                                strictness=SwitchControllerRequest.STRICT)
+    except rospy.ServiceException, e:
+        print "Service call failed: %s" % e
+
+def shutdown():
+    # Return to start position
+    print("Befor shutdown return the robot to start position!")
+    switchToPositionControllers()
+    pos_msg = Float64()
+    for i in range(0,7):
+        pos_msg.data = QStart[i]*0
+        position_controller_pub[i].publish(pos_msg)
+    time.sleep(6)
+    switchToTorqueControllers()
 def main():
     global angleZ
-
+    rospy.on_shutdown(shutdown)
     rospy.init_node('main_test', anonymous=True)
     rospy.Subscriber("/iiwa/joint_states", JointState, iiwaStateCallback)
     rospy.Subscriber("/iiwa/camera1/image_raw", Image, iiwaImageCallback)
@@ -138,7 +178,7 @@ def main():
     # Initialize publishers for send computation torques.
     for i in range(0,7):
         torque_controller_pub.append(rospy.Publisher("/iiwa/joint" + str(i+1) + "_torque_controller/command", Float64, queue_size=10))
-
+        position_controller_pub.append(rospy.Publisher("/iiwa/joint" + str(i+1) + "_position_controller/command", Float64, queue_size=10))
     rate = rospy.Rate(int(1.0/dt))
 
     # Get parameters for kinematic from setup.yaml file
@@ -171,6 +211,7 @@ def main():
     q_dest = kdl.JntArray(7)
     frame_dest = kdl.Frame()
 
+    QStart = q
     # Setting up initial point
     frame_dest.p[0] = 0.4
     frame_dest.p[1] = 0.0
@@ -248,6 +289,7 @@ def main():
 
         counter+=1
         rate.sleep()
+
 
 if __name__ == '__main__':
     try:
