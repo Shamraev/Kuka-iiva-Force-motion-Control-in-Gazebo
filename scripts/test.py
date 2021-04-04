@@ -215,7 +215,7 @@ def main():
     # Setting up initial point
     frame_dest.p[0] = 0.4
     frame_dest.p[1] = 0.0
-    frame_dest.p[2] = 0.1
+    frame_dest.p[2] = 0.5
     frame_dest.M = kdl.Rotation.RotY(3.14)*kdl.Rotation.RotZ(-3.14/2)
 
     ret = iksolverpos.CartToJnt(q, frame_dest, q_dest)
@@ -227,7 +227,12 @@ def main():
     startT = 0
     StartRotate = True
     while not rospy.is_shutdown():
+        if counter*dt>1.5:
+            frame_dest.p[2] = 0.25
         if counter*dt>3.0:
+            frame_dest.p[2] = 0.1
+
+        if counter*dt>5.0:
             # In Global CS
             p = kdl.Vector(NextP[1], NextP[0],0)*0.001*0.3*dt
             p = frame_dest*p
@@ -246,7 +251,7 @@ def main():
                 startT = counter*dt
                 StartRotate = False
 
-            if needWait==0 and counter*dt>5.0:
+            if needWait==0 and counter*dt>7.0:
                 frame_dest.p[0] = p.x()
                 frame_dest.p[1] = p.y()
             elif counter*dt - startT>needWait: # wait
