@@ -34,6 +34,7 @@ FzDef = -8.5
 cv_bridge = CvBridge()
 NextP = np.array([0, 0, 0])
 angleZ = 0
+Debug = False
 
 def iiwaStateCallback(data):
     global q, dq, ddq
@@ -55,33 +56,32 @@ def iiwaImageCallback(img_msg):
     global NextP, angleZ
     try:
         cv_image = cv_bridge.imgmsg_to_cv2(img_msg, "bgr8")
-        #cv2.imshow("Original Image", cv_image)
-        #--------------
-        # Convert to grayscale and threshold
+        if Debug:
+            cv2.imshow("Original Image", cv_image)
+        #Convert to grayscale and threshold
         hsv_img = cv2.cvtColor(cv_image, cv2.COLOR_BGR2HSV)
-        #cv2.imshow("HSV Image", hsv_img)
         lower_black = np.array([0, 0, 0])
         upper_black = np.array([180, 255, 30])
 
         masking = cv2.inRange(hsv_img, lower_black, upper_black)
-        #cv2.imshow("Original Image", cv_image)
-        #cv2.imshow("Black Color detection", masking)
 
         image, contours, hierarchy = cv2.findContours(masking, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
         img = cv_image.copy()
         cv2.drawContours(img, contours, -1, (0, 0, 255), 5)
-        # cv2.imshow("Black contours at the image", img)
-        # cv2.waitKey(1)
+        if Debug:
+            cv2.imshow("Black contours at the image", img)
+            cv2.waitKey(1)
 
         # find the biggest countour (c) by the area
         c = max(contours, key = cv2.contourArea)
         x,y,w,h = cv2.boundingRect(c)
 
         # draw the biggest contour (c) in green
-        output = cv_image.copy()
-        cv2.rectangle(output,(x,y),(x+w,y+h),(0,255,0),2)
-        # cv2.imshow("Black contour at the image_box", output)
-        # cv2.waitKey(1)
+        if Debug:
+            output = cv_image.copy()
+            cv2.rectangle(output,(x,y),(x+w,y+h),(0,255,0),2)
+            cv2.imshow("Black contour at the image_box", output)
+            cv2.waitKey(1)
 
         pointS = []
         pointE = []
@@ -157,6 +157,7 @@ def main():
     chain = tree.getChain(base_link, tool_link)
     L = np.transpose(np.array([[1, 1, 1, 0.01, 0.01, 0.01]]))
     iksolverpos = kdl.ChainIkSolverPos_LMA(chain, L)
+    jntToJacSolver = kdl.ChainJntToJacSolver(chain)
 
     # Generate dynamic model for orocos_kdl
     grav = kdl.Vector(0, 0, -9.82)
@@ -189,15 +190,14 @@ def main():
             # In Global CS
             p = kdl.Vector(NextP[1], NextP[0],0)*0.001*0.3*dt
             p = frame_dest*p
-            #rospy.loginfo("nexP in local CS: (%f, %f)",NextP[0], NextP[1])
-            #rospy.loginfo("nexP in Global CS: (%f, %f)",p.x(), p.y())
-            #rospy.loginfo("CurP in Global CS: (%f, %f, %f)",frame_dest.p[0], frame_dest.p[1], frame_dest.p[2])
-            #rospy.loginfo("angleZ: %f", angleZ)
-            #rospy.loginfo("Fz: %f", Fz)
-
+            if Debug:
+                rospy.loginfo("nexP in local CS: (%f, %f)",NextP[0], NextP[1])
+                rospy.loginfo("nexP in Global CS: (%f, %f)",p.x(), p.y())
+                rospy.loginfo("CurP in Global CS: (%f, %f, %f)",frame_dest.p[0], frame_dest.p[1], frame_dest.p[2])
+                rospy.loginfo("angleZ: %f", angleZ)
+                rospy.loginfo("Fz: %f", Fz)
 
             [Rz, Ry, Rx] = frame_dest.M.GetEulerZYX()
-            #rospy.loginfo("Euler angles Rz, Ry, Rx: %f, %f, %f", Rz, Ry, Rx)
 
             # Loop
             if StartRotate and  abs(Rz)<0.01:
@@ -205,7 +205,7 @@ def main():
                 startT = counter*dt
                 StartRotate = False
 
-            if needWait==0:
+            if needWait==0 and counter*dt>5.0:
                 frame_dest.p[0] = p.x()
                 frame_dest.p[1] = p.y()
             elif counter*dt - startT>needWait: # wait
@@ -219,18 +219,35 @@ def main():
             frame_dest.M = frame_dest.M*kdl.Rotation.RotZ(angleZ*dt*2)
 
         ret = iksolverpos.CartToJnt(q, frame_dest, q_dest)
-        #rospy.loginfo("IK solution: %f, %f, %f, %f, %f, %f, %f", q_dest[0],  q_dest[1],  q_dest[2],  q_dest[3],  q_dest[4],  q_dest[5],  q_dest[6])
         dyn_model.JntToGravity(q, grav_torques)
-        #rospy.loginfo("Estimation torque on joins: %f, %f, %f, %f, %f, %f, %f\n" % (grav_torques[0], grav_torques[1],grav_torques[2], grav_torques[3], grav_torques[4], grav_torques[5], grav_torques[6]))
+
+        if force_desired>20: # Not checked for force_desired>20
+            force_desired = 20
+
+        Fzerr = (force_desired-Fz)
+
+        J = kdl.Jacobian(7)
+        jntToJacSolver.JntToJac(q, J)
+
+        xdot = kdl.JntArray(6)
+        for i in range(6):
+            xdot[i] = 0;
+            for j in range(7):
+                xdot[i] += J[i,j] * dq[j]
+
+        FFz = [0, 0, -Fzerr*0.1, 0, 0, 0]
+        tau_Fz = kdl.JntArray(7)
         for i in range(0,7):
-            u[i] = KP[i]*(q_dest[i]-q[i]) - KD[i]*dq[i] + grav_torques[i]
+
+            for j in range(0,6):
+                tau_Fz[i] += J[j,i] * FFz[j];
+
+            u[i] = KP[i]*(q_dest[i]-q[i]) - KD[i]*dq[i] + grav_torques[i] + tau_Fz[i]
             torq_msg.data = u[i]
             torque_controller_pub[i].publish(torq_msg)
 
         counter+=1
         rate.sleep()
-
-
 
 if __name__ == '__main__':
     try:
