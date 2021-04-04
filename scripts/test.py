@@ -13,10 +13,6 @@ import numpy as np
 import PyKDL as kdl
 import kdl_parser_py.urdf
 
-#import message_filters
-#import cv2
-#from cv_bridge import CvBridge
-
 import cv2
 from cv_bridge import CvBridge, CvBridgeError
 
@@ -51,7 +47,6 @@ def iiwaForceSensorCallback(data):
     global Fz
     Fz = -data.wrench.force.z #-8.5 N - default
     Fz = Fz - FzDef # Force to surface
-    #rospy.loginfo("Fz: %f", Fz)
 def showImage(img):
     cv2.imshow('image', img)
     cv2.waitKey(3)
@@ -72,7 +67,6 @@ def iiwaImageCallback(img_msg):
         #cv2.imshow("Original Image", cv_image)
         #cv2.imshow("Black Color detection", masking)
 
-#---
         image, contours, hierarchy = cv2.findContours(masking, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
         img = cv_image.copy()
         cv2.drawContours(img, contours, -1, (0, 0, 255), 5)
@@ -84,8 +78,8 @@ def iiwaImageCallback(img_msg):
         x,y,w,h = cv2.boundingRect(c)
 
         # draw the biggest contour (c) in green
-        output = cv_image.copy()
-        cv2.rectangle(output,(x,y),(x+w,y+h),(0,255,0),2)
+        #output = cv_image.copy()
+        #cv2.rectangle(output,(x,y),(x+w,y+h),(0,255,0),2)
         # cv2.imshow("Black contour at the image_box", output)
         # cv2.waitKey(1)
 
@@ -109,7 +103,7 @@ def iiwaImageCallback(img_msg):
             cv_image = cv2.circle(cv_image, (pE[0],pE[1]), radius=10, color=(0, 0, 255), thickness=5)
             cv_image = cv2.circle(cv_image, (curP[0],curP[1]), radius=10, color=(0, 255, 0), thickness=5)
 
-            cv2.imshow("Points at the start", cv_image)
+            cv2.imshow("Points to go", cv_image)
             cv2.waitKey(1)
 
             # CS
@@ -117,31 +111,6 @@ def iiwaImageCallback(img_msg):
             # Angle
             V[1] = - V[1]
             angleZ = atan2(V[0], V[1])
-
-
-
-        # Find contour with max perimeter
-        # PMax = -1
-        # cntMP = None
-        # for cnt in contours:
-        #     curP = cv2.arcLength(cnt,True)
-        #     if curP>PMax:
-        #         cntMP = cnt
-        # img = cv_image.copy()
-        # cv2.drawContours(img, cntMP, -1, (0, 255, 0), 5)
-        # cv2.imshow("Black contour at the image", img)
-        # cv2.waitKey(1)
-
-        # points = []
-        # if cntMP.any(): # Found contour with max perimeter
-        #     yHLine = 5 # horizontal Line
-        #     points.append(cntMP[cntMP[:,:,1] == yHLine])
-        #
-        #     for p in points:
-        #         cv_image = cv2.circle(cv_image, (p[0],p[1]), radius=0, color=(0, 0, 255), thickness=-1)
-
-            #cv2.imshow("Points at the start", cv_image)
-           # cv2.waitKey(1)
 
     except CvBridgeError, e:
         rospy.logerr("CvBridge Error: {0}".format(e)) #loginfo
@@ -165,8 +134,6 @@ def main():
     rospy.Subscriber("/iiwa/joint_states", JointState, iiwaStateCallback)
     rospy.Subscriber("/iiwa/camera1/image_raw", Image, iiwaImageCallback)
     rospy.Subscriber("/iiwa/state/CartesianWrench", WrenchStamped, iiwaForceSensorCallback)
-
-    #tf
 
     # Initialize publishers for send computation torques.
     for i in range(0,7):
@@ -220,11 +187,8 @@ def main():
     StartRotate = True
     while not rospy.is_shutdown():
         if counter*dt>3.0:
-            #frame_dest.p[0] = 0.2*sin(counter*dt) + 0.5
-            #frame_dest.p[1] = 0.2*cos(counter*dt);    # Start controllers
-
             # In Global CS
-            p = kdl.Vector(NextP[1], NextP[0]+50,0)*0.001*0.3*dt
+            p = kdl.Vector(NextP[1], NextP[0],0)*0.001*0.3*dt
             p = frame_dest*p
             #rospy.loginfo("nexP in local CS: (%f, %f)",NextP[0], NextP[1])
             #rospy.loginfo("nexP in Global CS: (%f, %f)",p.x(), p.y())
@@ -232,19 +196,8 @@ def main():
             #rospy.loginfo("angleZ: %f", angleZ)
             rospy.loginfo("Fz: %f", Fz)
 
-
             [Rz, Ry, Rx] = frame_dest.M.GetEulerZYX()
             #rospy.loginfo("Euler angles Rz, Ry, Rx: %f, %f, %f", Rz, Ry, Rx)
-
-
-
-            # zContrl = (force_desired-Fz)*0.001*dt
-            # # Saturation
-            # if abs(zContrl)>0.05:
-            #     #zContrl = copysign(1, zContrl)*0.05
-            #     zContrl = 0
-            # frame_dest.p[2] = frame_dest.p[2] - zContrl
-            # rospy.loginfo("z: %f", frame_dest.p[2])
 
             # Loop
             if StartRotate and  abs(Rz)<0.01:
@@ -269,13 +222,21 @@ def main():
         #rospy.loginfo("IK solution: %f, %f, %f, %f, %f, %f, %f", q_dest[0],  q_dest[1],  q_dest[2],  q_dest[3],  q_dest[4],  q_dest[5],  q_dest[6])
         dyn_model.JntToGravity(q, grav_torques)
 
+        if force_desired>20: # Not checked for force_desired>20
+            force_desired = 20
+
         Fzerr = (force_desired-Fz)
-        #FFz = kdl.JntArray(6)
-        #FFz[2] = 1*Fzerr
-        FFz = [0, 0, -Fzerr*0.5, 0, 0, 0]
+
         J = kdl.Jacobian(7)
         jntToJacSolver.JntToJac(q, J)
-        #print(J)
+
+        xdot = kdl.JntArray(6)
+        for i in range(6):
+            xdot[i] = 0;
+            for j in range(7):
+                xdot[i] += J[i,j] * dq[j]
+
+        FFz = [0, 0, -Fzerr*0.1, 0, 0, 0]
         tau_Fz = kdl.JntArray(7)
         #rospy.loginfo("Estimation torque on joins: %f, %f, %f, %f, %f, %f, %f\n" % (grav_torques[0], grav_torques[1],grav_torques[2], grav_torques[3], grav_torques[4], grav_torques[5], grav_torques[6]))
         for i in range(0,7):
@@ -289,8 +250,6 @@ def main():
 
         counter+=1
         rate.sleep()
-
-
 
 if __name__ == '__main__':
     try:
