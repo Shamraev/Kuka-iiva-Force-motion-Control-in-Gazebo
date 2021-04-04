@@ -190,6 +190,7 @@ def main():
     chain = tree.getChain(base_link, tool_link)
     L = np.transpose(np.array([[1, 1, 1, 0.01, 0.01, 0.01]]))
     iksolverpos = kdl.ChainIkSolverPos_LMA(chain, L)
+    jntToJacSolver = kdl.ChainJntToJacSolver(chain)
 
     # Generate dynamic model for orocos_kdl
     grav = kdl.Vector(0, 0, -9.82)
@@ -223,17 +224,27 @@ def main():
             #frame_dest.p[1] = 0.2*cos(counter*dt);    # Start controllers
 
             # In Global CS
-            p = kdl.Vector(NextP[1], NextP[0],0)*0.001*0.3*dt
+            p = kdl.Vector(NextP[1], NextP[0]+50,0)*0.001*0.3*dt
             p = frame_dest*p
             #rospy.loginfo("nexP in local CS: (%f, %f)",NextP[0], NextP[1])
             #rospy.loginfo("nexP in Global CS: (%f, %f)",p.x(), p.y())
             #rospy.loginfo("CurP in Global CS: (%f, %f, %f)",frame_dest.p[0], frame_dest.p[1], frame_dest.p[2])
             #rospy.loginfo("angleZ: %f", angleZ)
-            #rospy.loginfo("Fz: %f", Fz)
+            rospy.loginfo("Fz: %f", Fz)
 
 
             [Rz, Ry, Rx] = frame_dest.M.GetEulerZYX()
-            rospy.loginfo("Euler angles Rz, Ry, Rx: %f, %f, %f", Rz, Ry, Rx)
+            #rospy.loginfo("Euler angles Rz, Ry, Rx: %f, %f, %f", Rz, Ry, Rx)
+
+
+
+            # zContrl = (force_desired-Fz)*0.001*dt
+            # # Saturation
+            # if abs(zContrl)>0.05:
+            #     #zContrl = copysign(1, zContrl)*0.05
+            #     zContrl = 0
+            # frame_dest.p[2] = frame_dest.p[2] - zContrl
+            # rospy.loginfo("z: %f", frame_dest.p[2])
 
             # Loop
             if StartRotate and  abs(Rz)<0.01:
@@ -241,13 +252,7 @@ def main():
                 startT = counter*dt
                 StartRotate = False
 
-            # zContrl = (force_desired-Fz)*0.006*dt
-            # # Saturation
-            # if abs(zContrl)>0.05:
-            #     zContrl = copysign(1, zContrl)*0.05
-            # frame_dest.p[2] = frame_dest.p[2] - zContrl
-
-            if needWait==0:
+            if needWait==0 and counter*dt>5.0:
                 frame_dest.p[0] = p.x()
                 frame_dest.p[1] = p.y()
             elif counter*dt - startT>needWait: # wait
@@ -263,9 +268,22 @@ def main():
         ret = iksolverpos.CartToJnt(q, frame_dest, q_dest)
         #rospy.loginfo("IK solution: %f, %f, %f, %f, %f, %f, %f", q_dest[0],  q_dest[1],  q_dest[2],  q_dest[3],  q_dest[4],  q_dest[5],  q_dest[6])
         dyn_model.JntToGravity(q, grav_torques)
+
+        Fzerr = (force_desired-Fz)
+        #FFz = kdl.JntArray(6)
+        #FFz[2] = 1*Fzerr
+        FFz = [0, 0, -Fzerr*0.5, 0, 0, 0]
+        J = kdl.Jacobian(7)
+        jntToJacSolver.JntToJac(q, J)
+        #print(J)
+        tau_Fz = kdl.JntArray(7)
         #rospy.loginfo("Estimation torque on joins: %f, %f, %f, %f, %f, %f, %f\n" % (grav_torques[0], grav_torques[1],grav_torques[2], grav_torques[3], grav_torques[4], grav_torques[5], grav_torques[6]))
         for i in range(0,7):
-            u[i] = KP[i]*(q_dest[i]-q[i]) - KD[i]*dq[i] + grav_torques[i]
+
+            for j in range(0,6):
+                tau_Fz[i] += J[j,i] * FFz[j];
+
+            u[i] = KP[i]*(q_dest[i]-q[i]) - KD[i]*dq[i] + grav_torques[i] + tau_Fz[i]
             torq_msg.data = u[i]
             torque_controller_pub[i].publish(torq_msg)
 
