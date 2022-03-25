@@ -49,6 +49,7 @@ Working with the package is supposed to be from a docker container provided to p
     
     Upon successful completion of all the above actions, the manipulator will move the working tool along a curved surface on the border of black and white;
 
-    ![iiwa_test_2_example](docs/pics/iiwa_track_2_example.gif)
+    <img src="docs/pics/iiwa_track_2_example.gif?raw=true" width="800px">)
+    
 
     The source code of the example is in *scripts/test.py * and *src/test.cpp * and represents the ROS node */profi2021_master_solution*. The node subscribes to [topics */iiwa/joint1_torque_controller/command, ... , /iiwa/joint7_torque_controller/command*](https://docs.ros.org/en/api/std_msgs/html/msg/Float64.html ) to control the moments on the joints, on the topic [*/iiwa/controller_manager/switch_controller*](http://docs.ros.org/en/api/controller_manager_msgs/html/srv/SwitchController.html ) to enable _torque_ controllers and on the topic [*/iiwa/joint_states*](https://docs.ros.org/en/api/sensor_msgs/html/msg/JointState.html ) to read data on the position and speed of joints.
