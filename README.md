@@ -1,68 +1,54 @@
 ![iiwa_test_1](docs/pics/iiwa_test_1.png)
 
-Репозиторий содержит программное обеспечение для
-подготовки и сдачи задания категории _Магистратура_  направления Робототехники олимпиады [Я - Профессионал](https://yandex.ru/profi/courses2020).
-
-Данный репозиторий будет использоваться для проведения оценки заданий участников.
-
-Предоставялемое программное обеспечение включает ROS-пакет, содержащий пример управления манипулятором в режиме управления моментом, смены контроллеров, чтения данных с силомоментного датчика и получения изображения с камеры, установленной на манипуляторе в симуляторе gazebo.
-
-Работа с пакетом предполагается из docker-контейнера предоставляемого участникам в составе [основного репозитория олимпиады](https://gitlab.com/beerlab/prof2021/profi2021_robotics) и совместно с [репозиторием с описанием сцены и манипулятора для симулятора](https://gitlab.com/beerlab/prof2021/profi2021_master_scene), соответственно, предоставляемые далее инструкции требуют предварительно выполнить инструкции, представленные в обозначенных репозиториях.
+The provided software includes a ROS package containing an example of manipulator control in the moment control mode, changing controllers, reading data from a force-moment sensor and obtaining an image from a camera mounted on the manipulator in the gazebo simulator.
 
 
-#### Установка программного обеспечения
 
-1. В новом терминале вне docker-контейнера перейдите в корневую директорию основного репозитория олимпиады и склонируйте данный репозиторий в рабочее окружение выполнив:
+Working with the package is supposed to be from a docker container provided to participants as part of the [main repository of the Olympiad] (https://gitlab.com/beerlab/prof2021/profi2021_robotics) and together with [a repository with a description of the scene and manipulator for the simulator](https://gitlab.com/beerlab/prof2021/profi2021_master_scene ), accordingly, the instructions provided below require pre-executing the instructions provided in the designated repositories.
+
+
+#### Installing the software
+
+1. In the new terminal outside the docker container, go to the root directory of the main Olympiad repository and clone this repository into the working environment by doing:
 
         cd workspace/src
-        git clone https://gitlab.com/beerlab/prof2021/profi2021_master_solution.git
+        git clone https://gitlab.com/shamraev.alexeyd/profi2021_master_solution.git
 
-2. Откройте bash-сессию **внутри контейнера**, перейдите в смонтированное рабочее окружение и соберите все пакеты:
+2. Open a bash session **inside the container**, go to the mounted working environment and collect all the packages:
 
         bash docker/into_docker.sh
         cd /workspace
         catkin build
 
 
-#### Описание программного обеспечения
+#### Description of the software
 
-1. Репозиторий представляет собой ROS-пакет, который участникам олимпиады предстоит использовать для представления своего решения для оценки. Пакет включает в себя пример управления манипулятором c помощью PD-регулятора с компенсацией гравитации.
+1. The repository is a ROS package that includes Force-Motion control of Kuka Iiva manipulator.
 
-2. Перед запуском примера убедитесь, что программное обеспечение из [репозитория с описанием сцены и манипулятора для симулятора](https://gitlab.com/beerlab/prof2021/profi2021_master_scene) установленно корректно.
+2. Before running the example, make sure that the software from the [repository with a description of the scene and manipulator for the simulator] (https://gitlab.com/beerlab/prof2021/profi2021_master_scene) installed correctly.
 
-    Запустите симулятор:
+    Run the simulator:
 
         roslaunch profi2021_master_scene start_scene.launch
 
-    Дождитесь окончания загрузки симулятора и появления квадрокоптера на сцене. Для запуска примера в новой bash-сессии **внутри контейнера** выполните:
+    Wait until the simulator is loaded and the quadcopter appears on the stage. To run the example in a new bash session ** inside the container** run:
 
         roslaunch profi2021_master_solution solution.launch
 
-    Стоит отметить, что по умолчанию в laucnh-файле _solution.launch_ указан исполняемый файл, скомпилированный с **C++** файла test.cpp. Для использования аналогичной программы, написанной на языке **Python 2** необходимо закомментировать строку:
+    It is worth noting that by default, the laucnh file _solution.launch_ specifies an executable file compiled from the **C++** file test.cpp . To use a similar program written in **Python 2**, you need to comment out the line:
 
         <node pkg="profi2021_master_solution" type="master_test" name="master_test" output="screen" />
 
-    и раскомментировать:
+    and uncomment:
 
         <node pkg="profi2021_master_solution" name="master_test" type="test.py" output="screen"/>
 
-    При этом в некотором случае **.py** файлу необходимо дать права на исполнение:
+    At the same time, in some case, the **.py** file must be given execution rights:
         
         chmod a+x src/profi2021_master_solution/scripts/test.py
     
-    При успешном выполнении всех выше обозначенных действий манипулятор переместится рабочим инструментом в стартовую точку и через 3 секунды начнет движение по окружности в плоскости _x - y_;
+    Upon successful completion of all the above actions, the manipulator will move the working tool along a curved surface on the border of black and white;
 
-    ![iiwa_test_1_example](docs/pics/iiwa_track_1_example.gif)
+    ![iiwa_test_2_example](docs/pics/iiwa_track_2_example.gif)
 
-    Исходный код примера находится в *scripts/test.py* и *src/test.cpp* и представляет собой ROS-узел */profi2021_master_solution*. Узел подписывается на [топики  */iiwa/joint1_torque_controller/command, ... , /iiwa/joint7_torque_controller/command*](https://docs.ros.org/en/api/std_msgs/html/msg/Float64.html) для управления моментами на сочленениях, на топик [*/iiwa/controller_manager/switch_controller*](http://docs.ros.org/en/api/controller_manager_msgs/html/srv/SwitchController.html) для включения _torque_ контроллеров и на топик [*/iiwa/joint_states*](https://docs.ros.org/en/api/sensor_msgs/html/msg/JointState.html) для чтения данных о положении и скорости сочленений.
-
-
-  3. По заданию участнику необходимо реализовать движение вдоль кривой по часовой стрелке относительно мировой системы координат, заданной границей перехода белая-черная область с поддержанием желаемой постоянной силы. Значение силы задается при запуске решения ROS параметром **_force_desired_** в слудующем виде:
-
-          roslaunch profi2021_master_solution solution.launch force_desired:=40
-
-  В таком же виде будет задаваться желаемая сила виртуальным судьей, то есть он запустит указанную выше команду с произвольным положительным (менее **120** Н) параметром желаемой силы. По умолчанию, если не указать ROS параметр _force_desired_, то ему присвоится значение **20**.
-
-  **[!]** Обратите внимание, что измерения силы контакта между рабочим инструментом и поверхностью выражены в системе координат датчика силы `iiwa_link_7`, соответственно, при контакте сила вдоль оси Z может иметь отрицательные значения. Однако, желаемая сила, задаваемая для вас судьей всегда положительное вещественное число (см. III Закон Ньютона). Описанное здесь иллюстрируется на рисунке ниже.
-   
-![iiwa_force_sensor](docs/pics/force_sensor_frame.png)
+    The source code of the example is in *scripts/test.py * and *src/test.cpp * and represents the ROS node */profi2021_master_solution*. The node subscribes to [topics */iiwa/joint1_torque_controller/command, ... , /iiwa/joint7_torque_controller/command*](https://docs.ros.org/en/api/std_msgs/html/msg/Float64.html ) to control the moments on the joints, on the topic [*/iiwa/controller_manager/switch_controller*](http://docs.ros.org/en/api/controller_manager_msgs/html/srv/SwitchController.html ) to enable _torque_ controllers and on the topic [*/iiwa/joint_states*](https://docs.ros.org/en/api/sensor_msgs/html/msg/JointState.html ) to read data on the position and speed of joints.
