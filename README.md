@@ -1,7 +1,6 @@
 ![iiwa_test_1](docs/pics/iiwa_test_1.png)
 
-The provided software includes a ROS package containing an example of manipulator control in the moment control mode, changing controllers, reading data from a force-moment sensor and obtaining an image from a camera mounted on the manipulator in the gazebo simulator.
-
+The software provided includes a ROS package for controlling the movement of the Kuka iiva manipulator, which moves the working tool along a curved surface on the border of black and white.
 
 
 Working with the package is supposed to be from a docker container provided to participants as part of the [main repository of the Olympiad] (https://gitlab.com/beerlab/prof2021/profi2021_robotics) and together with [a repository with a description of the scene and manipulator for the simulator](https://gitlab.com/beerlab/prof2021/profi2021_master_scene ), accordingly, the instructions provided below require pre-executing the instructions provided in the designated repositories.
